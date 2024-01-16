@@ -1,1 +1,1 @@
-This project is the notes of electric mobile car.
+Notes of electric mobile car making.
