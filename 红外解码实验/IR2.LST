@@ -1,0 +1,274 @@
+C51 COMPILER V9.60.7.0   IR2                                                               07/29/2023 11:03:56 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE IR2
+OBJECT MODULE PLACED IN IR2.OBJ
+COMPILER INVOKED BY: D:\Keil\C51\BIN\C51.EXE IR2.C OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          /*程序说明： 
+   2          51单片机红外遥控解码程序
+   3          单片机采用外部中断INTI管脚和红外接收头的信号线相连，
+   4          中断方式为边沿触发方式。并用定时器0计算中断的间隔时间，
+   5          来区分前导码、二进制的1,0;8位操作码提取出来在数码管上显示。
+   6           
+   7          解码值在Im[2]中，当IrOK=1时解码有效。 
+   8          用遥控器对准红外接收头，按下遥控器按键，在数码管的两位上就会显示对应按键的编码
+   9          */
+  10          #include <reg52.h>
+  11          #define uchar unsigned char 
+  12          sbit P2_0 = P2^0;
+  13          sbit P2_1 = P2^1;
+  14          sbit P2_2 = P2^2;
+  15          sbit P2_3 = P2^3;
+  16          //sbit dula=P2^6;
+  17          //sbit wela=P2^7;
+  18          /*uchar code table[]={0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,
+  19                                  0x07,0x7f,0x6f,0x77,0x7c,0x39,0x5e,0x79,0x71};*/
+  20          uchar code table[]={ 0x03,0x9f,0x25,0x0d,0x99,0x49,0x41,0x1f,
+  21                                  0x01,0x19,0x11,0xc1,0x63,0x85,0x21,0x71}; 
+  22          uchar f;
+  23          
+  24          #define Imax 14000    //此处为晶振为11.0592时的取值, 
+  25          #define Imin 8000    //如用其它频率的晶振时,
+  26          #define Inum1 1450    //要改变相应的取值。
+  27          #define Inum2 700 
+  28          #define Inum3 3000 
+  29          
+  30          unsigned char Im[4]={0x00,0x00,0x00,0x00};
+  31          uchar show[2]={0,0};
+  32          unsigned long m,Tc;
+  33          unsigned char IrOK;
+  34          
+  35          //1602LCD设定:
+  36          sbit rs=P1^0;//H数据，L命令
+  37          sbit lcden=P2^5;//高脉冲使能，使能脉宽最小150ns
+  38          sbit rw=P1^1;
+  39          unsigned char code table1[]="Gu Yong Zhe";
+  40          unsigned char code table2[] = "Chun Jie Xu Qu";
+  41          unsigned char code table3[] = "Music Test";
+  42          unsigned char code table4[] = "Nothing   ";
+  43          
+  44          
+  45          void delayLCD(unsigned char x)
+  46          { unsigned int y;
+  47   1            for(;x>0;x--)
+  48   1         {                   
+  49   2          for(y=100;y>0;y--)
+  50   2              {};
+  51   2         }
+  52   1      }
+  53          
+  54          void lcdwrdata(unsigned char dat)
+  55          {
+C51 COMPILER V9.60.7.0   IR2                                                               07/29/2023 11:03:56 PAGE 2   
+
+  56   1         // dat = ((dat&0x01)<<7)|((dat&0x02)<<5)|((dat&0x04)<<3)|((dat&0x08)<<1)|((dat&0x10)>>1)|((dat&0x20)>>3
+             -)|((dat&0x40)>>5)|((dat&0x80)>>7);
+  57   1        rs = 1;//写数据时RS拉高
+  58   1        lcden = 1;
+  59   1        P0 = dat;
+  60   1        delayLCD(6);
+  61   1        lcden = 0;
+  62   1        delayLCD(6);
+  63   1      }
+  64          void lcdwrcom(unsigned char cdat)//写指令数据到LCD  
+  65          { 
+  66   1         // cdat = ((cdat&0x01)<<7)|((cdat&0x02)<<5)|((cdat&0x04)<<3)|((cdat&0x08)<<1)|((cdat&0x10)>>1)|((cdat&0
+             -x20)>>3)|((cdat&0x40)>>5)|((cdat&0x80)>>7);
+  67   1        rs = 0;//写指令时RS拉低
+  68   1        lcden = 1;
+  69   1        P0 = cdat;//
+  70   1        delayLCD(6);//不加此延时将导致不能写入指令，但能写入显示数据
+  71   1        lcden = 0;
+  72   1        delayLCD(6);
+  73   1      }
+  74          void lcd_init()
+  75          {
+  76   1        lcdwrcom(0x38);//0x38设置显示模式为：16X2 显示,5X7 点阵,8 位数据接口
+  77   1        lcdwrcom(0x0e);//打开显示光标闪烁
+  78   1        lcdwrcom(0x06);//当读或写一个字符后地址指针加1, 且光标加1.
+  79   1        lcdwrcom(0x01);//数据指针清零
+  80   1      }
+  81          
+  82          
+  83          void delay(uchar i)
+  84          {
+  85   1        uchar j,k,l; 
+  86   1        for(j=i;j>0;j--)
+  87   1          for(k=250;k>0;k--)
+  88   1            for(l=250;l>0;l++);
+  89   1      }
+  90          
+  91          void display()
+  92          { int k=200;
+  93   1         //P2_0 = 0;P2_1 = 1;P2_2 = 1;P2_3 = 1;//只有一位数码管, 用不到位选.
+  94   1         P0=table[show[0]];
+  95   1         delay(k);
+  96   1         P0=table[show[1]];
+  97   1         delay(k);
+  98   1         P0=0xfd;
+  99   1         delay(k);
+ 100   1      /* 因为我们的小车只有一位数码管, 所以这个不需要显示.
+ 101   1         P2_0 = 1;P2_1 = 0;P2_2 = 1;P2_3 = 1;
+ 102   1         P0=table[show[1]];
+ 103   1         delay(2);
+ 104   1      */
+ 105   1        /* dula=0;
+ 106   1         P0=table[show[1]];
+ 107   1         dula=1;
+ 108   1         dula=0;
+ 109   1         
+ 110   1         wela=0;
+ 111   1         P0=0xfd;
+ 112   1         wela=1;
+ 113   1         wela=0;
+ 114   1         delay(5);
+ 115   1         
+C51 COMPILER V9.60.7.0   IR2                                                               07/29/2023 11:03:56 PAGE 3   
+
+ 116   1         P0=table[show[0]];
+ 117   1         dula=1;
+ 118   1         dula=0;
+ 119   1         
+ 120   1         P0=0xfe;
+ 121   1         wela=1;
+ 122   1         wela=0;
+ 123   1         delay(5);*/
+ 124   1      }
+ 125          
+ 126          
+ 127          //外部中断解码程序
+ 128          void intersvr1(void) interrupt 2 using 1
+ 129          {  //外部中断1允许, 用寄存器1.
+ 130   1          int ic;
+ 131   1          Tc = TH0*256 + TL0;                       //提取中断时间间隔时长
+ 132   1          TH0 = 0; 
+ 133   1          TL0 = 0;                                //定时中断重新置零
+ 134   1          if((Tc>Imin)&&(Tc<Imax))
+ 135   1         { //如果中断时间在8000~14000内, 即8ms--14ms内(低电平启始码, 下降沿触发)
+ 136   2           // 如果把Imax改为10000, 是否同样有效???
+ 137   2              m=0;
+ 138   2              f=1;
+ 139   2              return; 
+ 140   2          }       //找到启始码
+ 141   1         
+ 142   1          if(f==1)
+ 143   1         {
+ 144   2              if(Tc>Inum1&&Tc<Inum3) 
+ 145   2             {//1.45ms--3ms之间,    
+ 146   3                  Im[m/8]=Im[m/8]>>1|0x80; 
+ 147   3                  m++; 
+ 148   3              }
+ 149   2             
+ 150   2              if(Tc>Inum2&&Tc<Inum1) 
+ 151   2             { // 0.7ms--1.45ms
+ 152   3                  Im[m/8]=Im[m/8]>>1; 
+ 153   3                  m++; //取码 
+ 154   3              }
+ 155   2             
+ 156   2              if(m==32) 
+ 157   2             {    m=0;  
+ 158   3                  f=0;
+ 159   3               
+ 160   3                  if(Im[2]==~Im[3]) 
+ 161   3                 {    
+ 162   4                      IrOK=1; 
+ 163   4                  }
+ 164   3                  else IrOK=0;   //取码完成后判断读码是否正确
+ 165   3              }
+ 166   2                     //准备读下一码
+ 167   2         }
+ 168   1         if(IrOK==1){
+ 169   2            if(Im[2]==table[0]) 
+ 170   2              { 
+ 171   3                for(ic=0;ic<10;ic++)
+ 172   3                { lcdwrdata(table1[ic]);
+ 173   4                  delayLCD(10);
+ 174   4                }
+ 175   3              }
+ 176   2            else if(Im[2]==table[1]) 
+ 177   2              { 
+C51 COMPILER V9.60.7.0   IR2                                                               07/29/2023 11:03:56 PAGE 4   
+
+ 178   3                for(ic=0;ic<10;ic++)
+ 179   3                { lcdwrdata(table2[ic]);
+ 180   4                  delayLCD(10);
+ 181   4                }
+ 182   3              }
+ 183   2            else if(Im[2]==table[2]) 
+ 184   2            { 
+ 185   3                for(ic=0;ic<10;ic++)
+ 186   3                { lcdwrdata(table3[ic]);
+ 187   4                  delayLCD(10);
+ 188   4                }
+ 189   3            }
+ 190   2            else 
+ 191   2            { 
+ 192   3              for(ic=0;ic<10;ic++)
+ 193   3                { lcdwrdata(table4[ic]);
+ 194   4                  delayLCD(10);
+ 195   4                }
+ 196   3            }
+ 197   2            IrOK=0;
+ 198   2      }
+ 199   1      }
+ 200          
+ 201          /*演示主程序*/
+ 202          void main()
+ 203          {
+ 204   1          unsigned int  a;
+ 205   1         
+ 206   1          m=0;
+ 207   1          f=0;
+ 208   1          EA=1;     //IE寄存器最高位, 中断允许;
+ 209   1          IT1=1;    //NIT1, 延边触发中断, 下降沿有效;
+ 210   1          EX1=1;    //IE寄存器D2位, INT1 中断允许;
+ 211   1       
+ 212   1          TMOD=0x11;    //定时器工作方式寄存器, 高4位管理 T1, 低4位管理 T0;
+ 213   1                        //0001 0001, M1M0=01表示T0, T1均为16位定时器/计数器, C/T位为0,是定时器. 
+ 214   1                        //T0 的启停由软件设置 TR0 实现。TR0 = 1： 启动定时/ 计数器 T0； TR0 = 0： 停止定时/ 计数器 T0 .
+ 215   1          TH0=0;
+ 216   1          TL0=0;
+ 217   1          TR0=1;//ET0=1;
+ 218   1        
+ 219   1        rw = 0;
+ 220   1        delayLCD(200);
+ 221   1        lcden = 0;
+ 222   1        lcd_init();   //写指令必须有rs=0,rw=0,lcden=1;
+ 223   1        lcdwrcom(0x00|0x80);
+ 224   1      
+ 225   1          while(1)
+ 226   1         {
+ 227   2      
+ 228   2              if(IrOK==1) 
+ 229   2             {
+ 230   3                  show[1] = Im[2] & 0x0F;     //取键码的低四位
+ 231   3                  show[0] = Im[2] >> 4;  
+ 232   3                  IrOK = 0;
+ 233   3              }
+ 234   2                   
+ 235   2              for(a=100;a>0;a--)
+ 236   2             {
+ 237   3                  display();
+ 238   3              }
+ 239   2          }
+C51 COMPILER V9.60.7.0   IR2                                                               07/29/2023 11:03:56 PAGE 5   
+
+ 240   1      }
+ 241          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    757    ----
+   CONSTANT SIZE    =     65    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     16       4
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
