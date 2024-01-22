@@ -1,0 +1,137 @@
+C51 COMPILER V9.60.7.0   LCD1602                                                           07/30/2023 01:00:25 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE LCD1602
+OBJECT MODULE PLACED IN LCD1602.OBJ
+COMPILER INVOKED BY: D:\Keil\C51\BIN\C51.EXE LCD1602.C OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          //程序功能1602液晶第一行显示"0123456789ABCDEF";第二行显示"!@#$%^&*()<>{}?+";
+   2          #include "reg52.h"
+   3          #define uchar unsigned char 
+   4          #define uint unsigned int
+   5          
+   6          sbit rs=P1^0;//H数据，L命令
+   7          sbit en=P2^5;//高脉冲使能，使能脉宽最小150ns
+   8          sbit rw=P1^1;
+   9          uchar code table[]="mcustudio.com.cn";
+  10          uchar code table1[]="TEL:159808545601";
+  11          uchar code table2[] = "0123456789abcdef";
+  12          void delay(uchar x)
+  13          { uint y;
+  14   1            for(;x>0;x--)
+  15   1         {                   
+  16   2          for(y=100;y>0;y--)
+  17   2              {};
+  18   2         }
+  19   1      }
+  20          void lcdwrdata(uchar dat)
+  21          {
+  22   1         // dat = ((dat&0x01)<<7)|((dat&0x02)<<5)|((dat&0x04)<<3)|((dat&0x08)<<1)|((dat&0x10)>>1)|((dat&0x20)>>3
+             -)|((dat&0x40)>>5)|((dat&0x80)>>7);
+  23   1        rs = 1;//写数据时RS拉高
+  24   1        P0 = dat;
+  25   1        delay(6);
+  26   1        en = 1;
+  27   1        delay(6);
+  28   1        en = 0;
+  29   1        delay(6);
+  30   1      }
+  31          void lcdwrcom(uchar cdat)//写指令数据到LCD  
+  32          { 
+  33   1         // cdat = ((cdat&0x01)<<7)|((cdat&0x02)<<5)|((cdat&0x04)<<3)|((cdat&0x08)<<1)|((cdat&0x10)>>1)|((cdat&0
+             -x20)>>3)|((cdat&0x40)>>5)|((cdat&0x80)>>7);
+  34   1        rs = 0;//写指令时RS拉低
+  35   1        P0 = cdat;//
+  36   1        delay(6);
+  37   1        en = 1;
+  38   1        delay(6);//不加此延时将导致不能写入指令，但能写入显示数据
+  39   1        en = 0;
+  40   1        delay(6);
+  41   1      }
+  42          void lcd_init()
+  43          { 
+  44   1        lcdwrcom(0x38);//0x38设置显示模式为：16X2 显示,5X7 点阵,8 位数据接口
+  45   1        lcdwrcom(0x0f);//打开显示光标闪烁
+  46   1        lcdwrcom(0x06);//当读或写一个字符后地址指针加1, 且光标加1.
+  47   1        //lcdwrcom(0x05);//当写一个字符, 整屏显示右移, 光标不动而屏幕动.
+  48   1        //lcdwrcom(0x07);//当写一个字符, 整屏显示左移, 光标不动而屏幕动.
+  49   1        lcdwrcom(0x01);//数据指针清零
+  50   1      }
+  51          void main()
+  52          { uchar n;
+  53   1        rw = 0; //写模式(写指令或写数据)
+C51 COMPILER V9.60.7.0   LCD1602                                                           07/30/2023 01:00:25 PAGE 2   
+
+  54   1        delay(200);
+  55   1        en = 0;
+  56   1        delay(6);
+  57   1        lcd_init();   //写指令必须有rs=0,rw=0,en=1;
+  58   1        
+  59   1        lcdwrcom(0x80);//这里设置数据指针在第一行第一列.每写一个字符, 指针加1;
+  60   1        //由于RAM映射区域不连续, 不能从0--127一直写.
+  61   1        for(n=32;n<48;n++)
+  62   1        {
+  63   2          //lcdwrdata(table[n]);
+  64   2          lcdwrdata(n);
+  65   2          delay(100);
+  66   2        }
+  67   1        lcdwrcom(0x80+0x40);
+  68   1        for(n=48;n<64;n++)
+  69   1        {
+  70   2          //lcdwrdata(table[n]);
+  71   2          lcdwrdata(n);
+  72   2          delay(100);
+  73   2        }
+  74   1        
+  75   1        lcdwrcom(0x01);
+  76   1        lcdwrcom(0x80);
+  77   1        for(n=64;n<80;n++)
+  78   1        {
+  79   2          //lcdwrdata(table[n]);
+  80   2          lcdwrdata(n);
+  81   2          delay(100);
+  82   2        }
+  83   1        
+  84   1        lcdwrcom(0x80+0x40);
+  85   1        for(n=80;n<96;n++)
+  86   1        {
+  87   2          //lcdwrdata(table[n]);
+  88   2          lcdwrdata(n);
+  89   2          delay(100);
+  90   2        }
+  91   1      
+  92   1        //lcdwrcom(0x02);
+  93   1        /*
+  94   1        for(n=0;n<16;n++)
+  95   1        {
+  96   1          lcdwrdata(table1[n]);
+  97   1          delay(100);
+  98   1        }
+  99   1        lcdwrcom(0x01);
+ 100   1        for(n=0;n<20;n++)
+ 101   1        {
+ 102   1          lcdwrdata(table2[n]);
+ 103   1          delay(100);
+ 104   1        }*/
+ 105   1        while(1)
+ 106   1        {
+ 107   2        }
+ 108   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    176    ----
+   CONSTANT SIZE    =     51    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+C51 COMPILER V9.60.7.0   LCD1602                                                           07/30/2023 01:00:25 PAGE 3   
+
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
