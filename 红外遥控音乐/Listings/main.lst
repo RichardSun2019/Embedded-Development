@@ -1,0 +1,288 @@
+C51 COMPILER V9.60.7.0   MAIN                                                              07/30/2023 14:00:05 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: D:\Keil\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main.ls
+                    -t) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          /*************************************************************
+   2          [Œƒº˛√˚] C51∫ÏÕ‚“£øÿ“∫æßœ‘ æ“Ù¿÷∫–
+   3          [π¶ƒ‹]   1.“Ù¿÷∫–(ø…—°“Ù¿÷); 2.∫ÏÕ‚“£øÿ—°∏Ë«˙; 3.1602LCD∏Ë«˙√˚œ‘ æ.
+   4          [‘≠¿Ì]   
+   5          
+   6          *************************************************************/
+   7          #include <REG52.H>
+   8          #include <INTRINS.H>
+   9          //#include <stdio.h>
+  10          #include <NOTE.H>
+  11          #include <string.h>
+  12          
+  13          #define uchar unsigned char 
+  14          #define uint unsigned int
+  15            
+  16          #define Imax 14000    //¥À¥¶Œ™æß’ÒŒ™11.0592 ±µƒ»°÷µ, 
+  17          #define Imin 8000    //»Á”√∆‰À¸∆µ¬ µƒæß’Ò ±,
+  18          #define Inum1 1450    //“™∏ƒ±‰œ‡”¶µƒ»°÷µ°£
+  19          #define Inum2 700 
+  20          #define Inum3 3000 
+  21          
+  22          unsigned char f;
+  23          sbit Beep = P2^3;
+  24          unsigned int ni = 0;
+  25          unsigned int i=0;
+  26          unsigned int *pt = music_none; // ÷∏œÚ¿÷∆◊ ˝◊Èµƒ÷∏’Î;
+  27          unsigned char code table[]={0x0c,0x18,0x5e,0x08,0x1c,0x5a,0x42,0x52,0x4a }; //
+  28          unsigned char Im[4]={0x00,0x00,0x00,0x00};
+  29          unsigned long m,Tc;
+  30          unsigned char IrOK;
+  31          
+  32          //1602LCD…Ë∂®:
+  33          sbit rs=P1^0;//H ˝æ›£¨L√¸¡Ó
+  34          sbit en=P2^5;//∏ﬂ¬ˆ≥Â πƒ‹£¨ πƒ‹¬ˆøÌ◊Ó–°150ns
+  35          sbit rw=P1^1;
+  36          unsigned char code Song1[] = "Gu Yong Zhe     ";
+  37          unsigned char code Song2[] = "Chun Jie Xu Qu  ";
+  38          unsigned char code Song3[] = "Music Test      ";
+  39          unsigned char code Song4[] = "Nothing         ";
+  40          
+  41          void int1()  interrupt 1   /*≤…”√∂® ±∆˜0 øÿ÷∆Ω⁄≈ƒ °£interrupt0£¨1,2,3,4∑÷±∂‘”¶Õ‚÷–∂œ0°¢
+  42                                        ∂® ±∆˜0°¢Õ‚÷–∂œ1°¢∂® ±∆˜1°¢¥Æ––ø⁄*/   
+  43          {  TH0=0xd8;         
+  44   1         TL0=0xef;      
+  45   1         ni--;   }  
+  46          
+  47          void delay (unsigned int i)   //øÿ÷∆∆µ¬ —” ±£¨æ≠µ˜ ‘£¨—” ± ±º‰=8i+2  us    
+  48          {      
+  49   1       while(--i);   
+  50   1      }  
+  51          
+  52          void delayLCD(unsigned char x)
+  53          { unsigned int y;
+  54   1            for(;x>0;x--)
+C51 COMPILER V9.60.7.0   MAIN                                                              07/30/2023 14:00:05 PAGE 2   
+
+  55   1         {                   
+  56   2          for(y=100;y>0;y--)
+  57   2              {};
+  58   2         }
+  59   1      }
+  60          
+  61          void read_sta()  //∂¡◊¥Ã¨
+  62          {
+  63   1        uint j=1000;//≥¨ ±±‰¡ø
+  64   1        P0=0x80;
+  65   1        rs=0;    //rs=0 rw=1 E=1 ∂¡◊¥Ã¨
+  66   1        rw=1;
+  67   1        en=1;
+  68   1        while((P0&0x80)&&j--)_nop_();//√¶‘Úµ»¥˝“ª∏ˆnop¥Û∏≈1us≈‰∫œ…œ√Êµƒj=1000 ◊ˆ1ms≥¨ ±≈–∂œ
+  69   1        en=0; //en¿≠µÕ 
+  70   1      }
+  71          
+  72          void write_com(uchar com)
+  73          {
+  74   1        //read_sta();  //∂¡√¶–≈∫≈,µ´ «’‚∏ˆ»ŒŒÒ“ª∂®≤ªƒ‹º”’‚∏ˆ∫Ø ˝, ∑Ò‘ÚLCDœ‘ æ≤ª’˝»∑.
+  75   1        rs=0;       //–¥√¸¡Órs=0 –¥ ˝æ›rs=1
+  76   1        rw=0;       //∂¡,rw=0
+  77   1        P0=com;     //∞—“™–¥µƒ ˝æ›∑≈µΩ ˝æ›ø⁄
+  78   1        en=0;     //E“ª∏ˆ’˝¬ˆ≥Â–¥“ª∏ˆ ˝æ› À˘ŒΩ“ª∏ˆ’˝¬ˆ≥ÂæÕ «÷∏E¥”0->1->0µƒ“ª∏ˆµÕ∏ﬂµÕµƒ±‰ªª À˘“‘’‚¿Ôœ»¿≠µÕen=0
+  79   1        delayLCD(6);
+  80   1        en=1;
+  81   1        delayLCD(6);
+  82   1        en=0;
+  83   1      }
+  84          void write_data(uchar dat)
+  85          {
+  86   1        //read_sta();
+  87   1        rs=1; //rs=1–¥ ˝æ›
+  88   1        rw=0;
+  89   1        P0=dat;
+  90   1        en=0; //Õ¨…œ
+  91   1        delayLCD(6);
+  92   1        en=1;
+  93   1        delayLCD(6);
+  94   1        en=0;
+  95   1      }
+  96          void lcd_init()
+  97          {
+  98   1        write_com(0x38); //8Œª ˝æ›ø⁄£¨¡Ω––œ‘ æ£¨5*7µ„’Û◊÷∑˚
+  99   1        write_com(0x0f);   //¥Úø™œ‘ æπ‚±Í…¡À∏
+ 100   1        write_com(0x06);   //∂¡–¥÷∏’Îº”1∆¡ƒª≤ª“∆∂Ø 0101
+ 101   1        write_com(0x01);   //«Â∆¡π‚±Í∑µªÿ00HŒª÷√
+ 102   1      }
+ 103          
+ 104          
+ 105          //Õ‚≤ø÷–∂œΩ‚¬Î≥Ã–Ú
+ 106          void intersvr1(void) interrupt 2 using 1
+ 107          {  //Õ‚≤ø÷–∂œ1‘ –Ì, ”√ºƒ¥Ê∆˜1.
+ 108   1        //◊¢“‚“ª¥ŒΩ‚¬Î–Ë“™∂‡¥Œµ˜”√∏√÷–∂œ∫Ø ˝
+ 109   1        int ic=0;
+ 110   1        
+ 111   1        ET0=0; 
+ 112   1          
+ 113   1          Tc = TH1*256 + TL1;                       //Ã·»°÷–∂œ ±º‰º‰∏Ù ±≥§
+ 114   1          TH1 = 0; 
+ 115   1          TL1 = 0;                                //∂® ±÷–∂œ÷ÿ–¬÷√¡„
+ 116   1          if((Tc>Imin)&&(Tc<Imax))
+C51 COMPILER V9.60.7.0   MAIN                                                              07/30/2023 14:00:05 PAGE 3   
+
+ 117   1         { //»Áπ˚÷–∂œ ±º‰‘⁄8000~14000ƒ⁄, º¥8ms--14msƒ⁄(µÕµÁ∆Ω∆Ù º¬Î, œ¬Ωµ—ÿ¥•∑¢)
+ 118   2           // »Áπ˚∞—Imax∏ƒŒ™10000,  «∑ÒÕ¨—˘”––ß???
+ 119   2              m=0;
+ 120   2              f=1;
+ 121   2              return; 
+ 122   2          }       //’“µΩ∆Ù º¬Î
+ 123   1         
+ 124   1          if(f==1)
+ 125   1         {
+ 126   2              if(Tc>Inum1&&Tc<Inum3) 
+ 127   2             {//1.45ms--3ms÷Æº‰,    
+ 128   3                  Im[m/8]=Im[m/8]>>1|0x80; 
+ 129   3                  m++; 
+ 130   3              }
+ 131   2             
+ 132   2              if(Tc>Inum2&&Tc<Inum1) 
+ 133   2             { // 0.7ms--1.45ms
+ 134   3                  Im[m/8]=Im[m/8]>>1; 
+ 135   3                  m++; //»°¬Î 
+ 136   3              }
+ 137   2             
+ 138   2              if(m==32) 
+ 139   2             {    m=0;  
+ 140   3                  f=0;
+ 141   3               
+ 142   3                  if(Im[2]==~Im[3]) 
+ 143   3                 {    
+ 144   4                      IrOK=1; 
+ 145   4                  }
+ 146   3                  else {IrOK=0;ET0=1; }   //»°¬ÎÕÍ≥…∫Û≈–∂œ∂¡¬Î «∑Ò’˝»∑
+ 147   3              }
+ 148   2                     //◊º±∏∂¡œ¬“ª¬Î
+ 149   2         }
+ 150   1         if(IrOK==1){
+ 151   2            write_com(0x01);
+ 152   2            
+ 153   2            if(Im[2]==table[0]) 
+ 154   2              { pt=music_Guyongzhe;
+ 155   3                write_com(0x80);
+ 156   3                for(ic=0;ic<16;ic++)
+ 157   3                { write_data(Song1[ic]);}
+ 158   3              }
+ 159   2            else if(Im[2]==table[1]) 
+ 160   2              { pt=music_Chunjie;
+ 161   3                write_com(0x80);
+ 162   3                for(ic=0;ic<16;ic++)
+ 163   3                { write_data(Song2[ic]);}
+ 164   3              }
+ 165   2            else if(Im[2]==table[2]) 
+ 166   2            {   pt=music_test;
+ 167   3                write_com(0x80);
+ 168   3                for(ic=0;ic<16;ic++)
+ 169   3                { write_data(Song3[ic]);  }
+ 170   3            }
+ 171   2            else 
+ 172   2            { pt=music_none;
+ 173   3              write_com(0x80);
+ 174   3              for(ic=0;ic<16;ic++)
+ 175   3                { write_data(Song4[ic]);  }
+ 176   3            }
+ 177   2          IrOK=0;
+ 178   2          i=0;
+C51 COMPILER V9.60.7.0   MAIN                                                              07/30/2023 14:00:05 PAGE 4   
+
+ 179   2          ET0=1; 
+ 180   2         }
+ 181   1      }
+ 182          
+ 183          
+ 184          void main()
+ 185          {
+ 186   1        unsigned int p;
+ 187   1        unsigned int ki;
+ 188   1        
+ 189   1        
+ 190   1        
+ 191   1        //TMODµƒƒ¨»œ÷µ(∏¥Œª÷µ)Œ™0x00.
+ 192   1        TMOD=0x11;
+ 193   1        //∂®“Â∫ÏÕ‚œ‡πÿµƒºƒ¥Ê∆˜(∫ÏÕ‚÷–∂œ∫Ø ˝÷–”√µΩº« ±∆˜1);
+ 194   1        m=0;
+ 195   1        f=0;
+ 196   1        
+ 197   1        //IEºƒ¥Ê∆˜:
+ 198   1        EA=1; //÷–∂œ‘ –Ì;
+ 199   1        EX1=1;//IEºƒ¥Ê∆˜D2Œª, INT1 ÷–∂œ‘ –Ì;
+ 200   1        ET0=1;
+ 201   1        //ET1=1;∂® ±∆˜÷–∂œ‘ –Ì, µ´’‚¿Ôº∆ ±∆˜Ωˆ”√¿¥º∆ ˝.
+ 202   1        
+ 203   1        //÷–∂œ”≈œ»º∂ºƒ¥Ê∆˜IP:
+ 204   1        IP=0x0c;
+ 205   1        //∂® ±∆˜øÿ÷∆ºƒ¥Ê∆˜TCON:
+ 206   1        IT1=1;//NIT1, —”±ﬂ¥•∑¢÷–∂œ, œ¬Ωµ—ÿ”––ß;
+ 207   1        
+ 208   1        //∂® ±∆˜ºƒ¥Ê∆˜TL0,TH0,TL1,TH1:
+ 209   1        TH0=0xd8;TL0=0xef;    /*≥ı º÷µ64535 £¨º”µΩ65535“Á≥ˆ£¨1«ß¥Œ£¨º¥1ms∂® ±Œ™“ª∏ˆµ•Œª
+ 210   1                               £¨π©Ω⁄≈ƒ π”√°££®12MHzæß’Ò£¨12∑÷∆µ£©,‘⁄∑‰√˘∆˜≤ø∑÷”√µΩ*/
+ 211   1        TH1=0;TL1=0;   //∫ÏÕ‚Ω” ’”√µΩ;
+ 212   1        TR1=1;
+ 213   1        
+ 214   1        
+ 215   1        Beep=1;         //1010 1010, ¥À ±Beep¥¶”⁄∏ﬂµÁ∆Ω, ∑‰√˘∆˜≤ªπ§◊˜. 
+ 216   1        
+ 217   1        //1602LCD≥ı ºªØ:
+ 218   1        rw = 0;
+ 219   1        delayLCD(200);
+ 220   1        en = 0;
+ 221   1        lcd_init();   //–¥÷∏¡Ó±ÿ–Î”–rs=0,rw=0,en=1;
+ 222   1        //while(1){}
+ 223   1        play:           
+ 224   1        while(1)
+ 225   1        {
+ 226   2          a:if(pt==music_none) {Beep=1;delay(1000); goto play;}
+ 227   2          else{
+ 228   3             p = pt[i];   
+ 229   3             if(p==0x00)       { i=0, delay(1000); goto play;}     //»Áπ˚≈ˆµΩΩ· ¯∑˚,—” ±1(’‚¿Ôœ‘»ª≤ª «1)√Î,ªÿµΩø
+             -™ º‘Ÿ¿¥“ª±È    
+ 230   3             else if(p==B4XZ) { i=i+2;Beep=1;delay(Z4); goto a;}
+ 231   3             else if(p==B8XZ) { i=i+2;Beep=1;delay(Z8); goto a;}
+ 232   3              else if(p==0xff)  { i=i+1;delay(47600); goto a;}  //»Ù≈ˆµΩÀƒ∑÷–›÷π∑˚,—” ±455ms,ºÃ–¯»°œ¬“ª“Ù∑˚    
+ 233   3             else              {ki=pt[i++]/2, ni=pt[i++];}  //»°∆µ¬ ≥£ ˝ ∫Õ Ω⁄≈ƒ≥£ ˝±æ∂Œø…Õ®π˝∏¸∏ƒmµƒ±∂ ˝£¨µ˜ ‘∏¸∏
+             -ƒµ˜ Ω   
+ 234   3                TR0=1;                                             //ø™∂® ±∆˜0   
+ 235   3           //P2=~P2;               //led»°∑¥…¡À∏
+ 236   3              while(ni!=0) Beep=~Beep ,delay(ki);  //£°£°£°”√while(n!=0)øÿ÷∆“Ù∑˚µƒ ±÷µ
+ 237   3          //’‚¿Ôœ‡µ±”⁄¡Ω∏ˆº∆ ±∆˜, “ª∏ˆ «◊‘»ª¡˜ ≈µƒº∆ ±∆˜n, ¡Ì“ª∏ˆ «delay∫Ø ˝, ”√¿¥÷∏∂®Beepµƒ∑≠◊™∆µ¬ , 
+ 238   3           //∆‰÷–, º∆À„π´ ΩŒ™ f = 1/[(m*8+2)*10^-6]    
+C51 COMPILER V9.60.7.0   MAIN                                                              07/30/2023 14:00:05 PAGE 5   
+
+ 239   3               
+ 240   3             TR0=0;                                             //πÿ∂® ±∆˜1    
+ 241   3          }          
+ 242   2        }
+ 243   1      }
+ 244            
+ 245          
+ 246          
+ 247          
+ 248          
+ 249          
+ 250          
+ 251          
+ 252          
+ 253          
+ 254          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1050    ----
+   CONSTANT SIZE    =   1453    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     21       4
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
